@@ -1,0 +1,16 @@
+# dsh bundle patch: insert the pages plugin.
+#
+# The plugin takes its vocabulary from config. A product supplies its own in its
+# own layer (either here or in a product bundle's patch); these are the generic
+# defaults, shown so the keys are discoverable:
+#
+#   - id: dsh-pages
+#     config:
+#       page: home                        # product page selected at startup
+#       workbenchPage: workbench          # the page that hosts the native UI
+#       classPrefix: dsh-pages            # CSS class prefix for the frame
+#       navigationSlot: pages.navigation  # product navigation slot key
+#       pageSlot: pages.page              # product page slot key (keyed)
+- insert:
+    - id: dsh-pages
+      name: dsh-pages
