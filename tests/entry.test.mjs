@@ -35,7 +35,9 @@ for (const entry of ['apply', 'applyWithConfig']) {
       export { calls, pages, registration, before, after };`);
     assert.deepEqual(result.calls, ['locale', 'shell.overlay', 'register']);
     assert.deepEqual(result.pages.getSnapshot().pages, [], 'disposing removes built-in registrations');
-    assert.deepEqual(Object.keys(result.registration.children), ['page.content']);
+    assert.deepEqual(Object.keys(result.registration.children), ['page.content', 'page.rail-action']);
+    assert.equal(result.registration.children['page.rail-action'].kind, 'keyed');
+    assert.equal(result.registration.inject().railActionSlot, 'page.rail-action');
     assert.equal(result.registration.children['page.content'].kind, 'keyed');
     assert.equal(typeof result.registration.inject().setPagePinned, 'function');
     assert.equal(typeof result.registration.inject().setRailWidth, 'function');

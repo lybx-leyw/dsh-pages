@@ -22,6 +22,12 @@ export function normalizeConfig(input = {}) {
   const pageSlot = id('pageSlot', 'page.content');
   if (!pageSlot.startsWith('page.')) throw new Error('dsh-pages: `pageSlot` must start with page.');
   if (homePage === managerPage) throw new Error('dsh-pages: `managerPage` must differ from `homePage`');
+  const railActionSlot = id('railActionSlot', 'page.rail-action');
+  if (!railActionSlot.startsWith('page.') || railActionSlot === pageSlot) {
+    throw new Error('dsh-pages: `railActionSlot` must start with page. and differ from pageSlot');
+  }
+  const railPosition = input.railPosition ?? 'left';
+  if (!RAIL_POSITIONS.includes(railPosition)) throw new Error(`dsh-pages: \`railPosition\` must be one of ${RAIL_POSITIONS.join(', ')}`);
   // Retain the identity fields so existing browser-local arrangements keep their key.
   return {
     homePage, managerPage, pageSlot,
@@ -29,6 +35,13 @@ export function normalizeConfig(input = {}) {
     navigationSlot: id('navigationSlot', 'page.navigation'),
     homeLabel: text('homeLabel', { en: 'DSH workbench', zh: 'DSH 工作台' }),
     managerLabel: text('managerLabel', { en: 'Pages', zh: '页面管理' }),
+    // The product's own opening width and the value "reset width" returns to.
+    // Omitted means the shell fallback; an out-of-range value is ignored rather
+    // than thrown, so a product typo cannot stop the shell from booting.
+    defaultRailWidth: validRailWidth(input.defaultRailWidth) ? input.defaultRailWidth : undefined,
+    railActionSlot,
+    railPosition,
+    railPlaceholderIcon: input.railPlaceholderIcon,
     homeIcon: input.homeIcon,
     managerIcon: input.managerIcon,
   };
@@ -36,13 +49,20 @@ export function normalizeConfig(input = {}) {
 
 /** Recycle membership is independent of a pinned shortcut in the top group. */
 export const PAGE_REGIONS = Object.freeze(['top', 'overflow', 'bottom']);
+export const RAIL_POSITIONS = Object.freeze(['left', 'top', 'bottom', 'right']);
 export const RAIL_WIDTH = Object.freeze({ min: 40, max: 96, default: 64 });
 export function validRailWidth(width) {
   return Number.isInteger(width) && width >= RAIL_WIDTH.min && width <= RAIL_WIDTH.max;
 }
 
 export function createPagesState(config, initialPage = config.homePage, { preferences } = {}) {
-  let snapshot = { railWidth: preferences?.getRailWidth?.() ?? RAIL_WIDTH.default, activePage: initialPage, pages: Object.freeze([]) };
+  // The product may choose its own default; the shell only supplies a fallback.
+  // "Reset width" must return to THIS value, otherwise a product that changed the
+  // default would still be reset to the shell's 64.
+  const defaultWidth = validRailWidth(config.defaultRailWidth) ? config.defaultRailWidth : RAIL_WIDTH.default;
+  const storedPosition = preferences?.getRailPosition?.();
+  const railPosition = RAIL_POSITIONS.includes(storedPosition) ? storedPosition : config.railPosition ?? 'left';
+  let snapshot = { railPosition, railWidth: preferences?.getRailWidth?.() ?? defaultWidth, defaultRailWidth: defaultWidth, railPlaceholderIcon: config.railPlaceholderIcon, activePage: initialPage, pages: Object.freeze([]) };
   const listeners = new Set();
   const pages = new Map();
   const registrations = new Map();
@@ -67,6 +87,23 @@ export function createPagesState(config, initialPage = config.homePage, { prefer
     selectPage(activePage) {
       if (!pages.has(activePage)) throw new Error(`dsh-pages: unknown page "${activePage}"`);
       publish({ activePage });
+    },
+    /** A client-owned component, not a persisted user preference. */
+    setRailPlaceholderIcon(icon) {
+      if (icon !== undefined && typeof icon !== 'function' && (icon === null || typeof icon !== 'object')) {
+        throw new TypeError('dsh-pages: rail placeholder icon must be a component or undefined');
+      }
+      publish({ railPlaceholderIcon: icon });
+    },
+    /** Product defaults are client-owned, separate from the user's saved width. */
+    setDefaultRailWidth(width) {
+      if (!validRailWidth(width)) throw new RangeError('dsh-pages: default navigation width must be an integer between 40 and 96');
+      publish({ defaultRailWidth: width });
+    },
+    setRailPosition(position) {
+      if (!RAIL_POSITIONS.includes(position)) throw new RangeError(`dsh-pages: navigation position must be one of ${RAIL_POSITIONS.join(', ')}`);
+      preferences?.setRailPosition?.(position);
+      publish({ railPosition: position });
     },
     setRailWidth(width) {
       if (!validRailWidth(width)) throw new RangeError('dsh-pages: navigation width must be an integer between 40 and 96');

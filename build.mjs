@@ -23,23 +23,31 @@ export const HOST_EXTERNALS = [
 ];
 
 export async function buildClient() {
-  return build({
+  const shared = {
     entryPoints: ['src/client.jsx'],
-    outfile: 'lib/client.js',
     bundle: true,
-    format: 'cjs',
     platform: 'browser',
     target: 'es2022',
     jsx: 'automatic',
     external: HOST_EXTERNALS,
     loader: { '.css': 'text', '.svg': 'text', '.md': 'text' },
     define: { 'process.env.NODE_ENV': '"production"' },
-    // The host's module table keys on the banner id, which must equal the
-    // package name.
-    banner: { js: 'window.__ModuleLoader__.load({id:"dsh-pages",factory:(require)=>{var module={exports:{}};var exports=module.exports;' },
-    footer: { js: 'return module.exports;}});' },
     logLevel: 'info',
-  });
+  };
+  const results = await Promise.all([
+    // DSH discovers lib/client.js directly. Its module-table registration must
+    // stay separate from the ordinary importable ESM entry below.
+    build({
+      ...shared, outfile: 'lib/client.js', format: 'cjs',
+      banner: { js: 'window.__ModuleLoader__.load({id:"@lybx-leyw/dsh-pages",factory:(require)=>{var module={exports:{}};var exports=module.exports;' },
+      footer: { js: 'return module.exports;}});' },
+    }),
+    build({ ...shared, outfile: 'lib/client.mjs', format: 'esm' }),
+  ]);
+  return {
+    errors: results.flatMap(result => result.errors),
+    warnings: results.flatMap(result => result.warnings),
+  };
 }
 
 if (process.argv[1]?.endsWith('build.mjs')) {

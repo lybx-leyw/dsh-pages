@@ -1,4 +1,5 @@
 import React from 'react';
+import { RAIL_POSITIONS } from './state.js';
 
 const REGIONS = ['top', 'overflow', 'bottom'];
 const DRAG_TYPE = 'application/x-dsh-pages-manager';
@@ -25,6 +26,17 @@ const styles = `
 [data-pages-manager] .pm-id{display:block;margin-top:2px;font:10px ui-monospace,monospace;color:var(--dsw-alias-label-caption,#8a9099)}
 [data-pages-manager] .pm-actions{display:flex;flex:0 1 auto;flex-wrap:wrap;align-items:center;gap:6px;max-width:100%}
 [data-pages-manager] button,[data-pages-manager] select{min-height:32px;max-width:100%;border:1px solid var(--dsw-alias-settings-card-stroke,#0000001f);border-radius:5px;background:var(--dsw-alias-bg-base,#f4f5f7);color:var(--dsw-alias-label-secondary,#4b5058);font:inherit;font-size:12px;padding:4px 8px;cursor:pointer}
+/* A native <select> draws its arrow inside the content box, so Latin-size
+   padding put the arrow on top of CJK labels (汉字 is about twice as wide as
+   the Latin glyphs the default padding assumed). Reserve the arrow's own space
+   explicitly and draw the arrow ourselves instead of relying on the UA's. */
+[data-pages-manager] select{
+  appearance:none;-webkit-appearance:none;-moz-appearance:none;
+  padding:4px 26px 4px 9px;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 13px) 52%,calc(100% - 8px) 52%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;
+}
 [data-pages-manager] button{min-width:32px;white-space:normal;overflow-wrap:anywhere}
 [data-pages-manager] button:hover:not(:disabled){background:var(--dsw-alias-button-elevated-fill,#0000000f)}
 [data-pages-manager] :is(button,select):focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#2f6fed);outline-offset:2px}
@@ -34,8 +46,16 @@ const styles = `
 @media(max-width:560px){[data-pages-manager] .pm-identity{flex-basis:100%}[data-pages-manager] .pm-actions{flex:1 1 100%}[data-pages-manager] li{padding:10px}}
 `;
 
-/** Snapshot-only view: registry ownership and persistence stay with the caller. */
-export function PageManager({ entries, railWidth = 64, resolveLabel, actions, t }) {
+/**
+ * Snapshot-only view: registry ownership and persistence stay with the caller.
+ *
+ * `defaultRailWidth` is the value "reset width" returns to. It comes from the
+ * snapshot (i.e. from the product's config), never from a literal here: a
+ * hard-coded 64 meant a product that changed its default was still reset to the
+ * shell's value.
+ */
+export function PageManager({ entries, railWidth = 64, defaultRailWidth = 64, railPosition = 'left', resolveLabel, actions, t }) {
+  const sizeLabel = t(railPosition === 'top' || railPosition === 'bottom' ? 'navigationHeight' : 'navigationWidth');
   const [dragging, setDragging] = React.useState(null);
   const [dropAt, setDropAt] = React.useState(null);
   const regionOf = entry => REGIONS.includes(entry.region) ? entry.region : 'overflow';
@@ -77,13 +97,24 @@ export function PageManager({ entries, railWidth = 64, resolveLabel, actions, t 
   return <div data-pages-manager="">
     <style data-pages-manager-style="">{styles}</style>
     <header><h2>{t('managerTitle')}</h2><p>{t('managerHint')}</p></header>
-    {actions.setRailWidth && <section aria-label={t('navigationWidth')}>
+    {actions.setRailPosition && <section aria-label={t('navigationPosition')}>
       <label style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span>{t('navigationWidth')}</span>
-        <input aria-label={t('navigationWidth')} type="range" min="40" max="96" step="1" value={railWidth}
+        <span>{t('navigationPosition')}</span>
+        <select aria-label={t('navigationPosition')} value={railPosition}
+          onChange={event => actions.setRailPosition(event.target.value)}>
+          {RAIL_POSITIONS.map(position => <option key={position} value={position}>
+            {t(`position${position[0].toUpperCase()}${position.slice(1)}`)}
+          </option>)}
+        </select>
+      </label>
+    </section>}
+    {actions.setRailWidth && <section aria-label={sizeLabel}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span>{sizeLabel}</span>
+        <input aria-label={sizeLabel} type="range" min="40" max="96" step="1" value={railWidth}
           onChange={event => actions.setRailWidth(Number(event.target.value))}/>
         <output>{railWidth} px</output>
-        <button type="button" onClick={() => actions.setRailWidth(64)}>{t('resetWidth')}</button>
+        <button type="button" onClick={() => actions.setRailWidth(defaultRailWidth)}>{t('resetWidth')}</button>
       </label>
     </section>}
     {REGIONS.map(region => <section key={region} aria-label={regionTitle(region)}>

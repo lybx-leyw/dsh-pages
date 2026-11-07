@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPagesState, normalizeConfig } from '../src/state.js';
+import { createPagesState, normalizeConfig, RAIL_POSITIONS } from '../src/state.js';
 import { createBrowserPreferences, decodePreferences, preferencesStorageKey } from '../src/preferences.js';
 
 const config = normalizeConfig();
@@ -16,6 +16,60 @@ function boot(storage, product = config) {
   return { preferences, pages: createPagesState(product, product.homePage, { preferences }), warnings };
 }
 const page = (pages, id) => pages.getSnapshot().pages.find(entry => entry.id === id);
+
+test('configured width applies to fresh browser preferences without overriding saved user width', () => {
+  const storage = memory(), product = normalizeConfig({ defaultRailWidth: 51 });
+  const fresh = boot(storage, product);
+  assert.equal(fresh.pages.getSnapshot().railWidth, 51);
+  assert.equal(fresh.pages.getSnapshot().defaultRailWidth, 51);
+  assert.equal(storage.writes, 0);
+  fresh.pages.setRailWidth(80);
+  assert.equal(boot(storage, product).pages.getSnapshot().railWidth, 80);
+  assert.equal(boot(undefined, product).pages.getSnapshot().railWidth, 51);
+});
+
+test('four-edge rail position defaults, persists, and publishes immutable snapshots', () => {
+  assert.deepEqual(RAIL_POSITIONS, ['left', 'top', 'bottom', 'right']);
+  assert.equal(normalizeConfig().railPosition, 'left');
+  const storage = memory(), product = normalizeConfig({ railPosition: 'right' });
+  const app = boot(storage, product);
+  assert.equal(app.preferences.getRailPosition(), undefined);
+  assert.equal(app.pages.getSnapshot().railPosition, 'right');
+  assert.equal(storage.writes, 0);
+  let notifications = 0;
+  app.pages.subscribe(() => notifications++);
+  const initial = app.pages.getSnapshot();
+  for (const position of RAIL_POSITIONS) {
+    app.pages.setRailPosition(position);
+    assert.equal(app.pages.getSnapshot().railPosition, position);
+    assert.equal(boot(storage, product).pages.getSnapshot().railPosition, position);
+    assert.equal(JSON.parse(storage.getItem(app.preferences.key)).railPosition, position);
+  }
+  assert.equal(initial.railPosition, 'right');
+  assert.equal(notifications, 4);
+  app.pages.setRailPosition('right');
+  assert.equal(notifications, 4, 'unchanged position stores intent without publishing');
+  assert.equal(storage.writes, 5);
+  assert.equal(boot(storage, normalizeConfig({ railPosition: 'top' })).pages.getSnapshot().railPosition, 'right', 'stored position wins over changed product default');
+});
+
+test('invalid rail positions are rejected or discarded without losing config fallback', () => {
+  for (const position of ['', 'middle', 'LEFT', 0, false, {}, [], null]) {
+    if (position !== null) assert.throws(() => normalizeConfig({ railPosition: position }), /railPosition/);
+    const storage = memory(), product = normalizeConfig({ railPosition: 'bottom' });
+    storage.data.set(preferencesStorageKey(product), JSON.stringify({ version: 1, pages: {}, railPosition: position }));
+    const app = boot(storage, product);
+    assert.equal(app.preferences.getRailPosition(), undefined);
+    assert.equal(app.pages.getSnapshot().railPosition, 'bottom');
+    assert.equal(Object.hasOwn(decodePreferences({ version: 1, pages: {}, railPosition: position }), 'railPosition'), false);
+    assert.throws(() => app.pages.setRailPosition(position), RangeError);
+    assert.throws(() => app.preferences.setRailPosition(position), RangeError);
+    assert.equal(storage.writes, 0);
+    assert.equal(app.pages.getSnapshot().railPosition, 'bottom');
+  }
+  const app = createPagesState(normalizeConfig({ railPosition: 'top' }), 'home', { preferences: { getRailPosition: () => 'invalid' } });
+  assert.equal(app.getSnapshot().railPosition, 'top');
+});
 
 test('registration defaults and runtime navigation do not write or revive pages', () => {
   const storage = memory(), app = boot(storage);
@@ -111,10 +165,11 @@ test('storage denial warns while in-memory arrangement and width continue workin
     const app = boot(storage);
     assert.doesNotThrow(() => {
       app.pages.registerPage({ id: 'a', label: 'A' });
-      app.pages.setPageRegion('a', 'bottom'); app.pages.setRailWidth(48);
+      app.pages.setPageRegion('a', 'bottom'); app.pages.setRailWidth(48); app.pages.setRailPosition('top');
     });
     assert.equal(page(app.pages, 'a').region, 'bottom');
     assert.equal(app.pages.getSnapshot().railWidth, 48);
+    assert.equal(app.pages.getSnapshot().railPosition, 'top');
     assert.ok(app.warnings.length >= 1);
   }
 });

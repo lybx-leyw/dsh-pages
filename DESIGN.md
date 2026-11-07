@@ -37,6 +37,12 @@ Settings remain in the native settings panel. Settings contributions are child s
 
 The built-ins are DSH workbench (`home`) and Page manager (`pages`), registered into the same page registry as other pages. They are not a separate navigation state machine. The configured home and manager identities must differ.
 
+The shell owns **navigation and the active-page lifecycle, never page layout**. It allocates a bare full-bleed region for the active page; everything inside that region belongs to the page: headings, toolbars, back links, readable-width columns, empty states, icons. A shell that supplied a default icon, a "back to workbench" button, or a centred content column was deciding page-level UI for every page at once, which is exactly what forces complex pages into a shell-shaped box.
+
+A page contributes its icon as part of its registration — an `icon` component, or a `glyph` string for packages without an icon library. The shell renders what the page declared and substitutes nothing, so a missing icon stays visible instead of being masked by a look-alike default.
+
+Keyboard handling follows the same boundary: the shell closes its own rail popover on Escape and otherwise leaves focus containment, tab order, and Escape to the page. A page with an editor, a dialog, or a "leave this page" gesture owns all three.
+
 The three explicit groups are `top`, `overflow` (recycle), and `bottom`. Recycling is a user arrangement choice, not automatic eviction caused by limited rail space. Nonempty `overflow` displays **…**, so recycled pages remain reachable. The manager itself can be recycled and reopened there.
 
 Pinning is independent state: a recycled page retains `region: 'overflow'`, with `pinned` and `pinOrder` controlling its extra shortcut after **…** in the top group. It remains listed in the recycle group. Unpinning removes that shortcut without promoting the page into `top`. Normal ordering and pin ordering must not be conflated; `promotePage` is an arrangement action, not the pin-state authority.

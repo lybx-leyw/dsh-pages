@@ -1,5 +1,5 @@
 /** Browser-local preferences. Runtime objects and registrations never enter storage. */
-import { PAGE_REGIONS, RAIL_WIDTH, validRailWidth } from './state.js';
+import { PAGE_REGIONS, RAIL_POSITIONS, RAIL_WIDTH, validRailWidth } from './state.js';
 
 const VERSION = 1;
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -16,6 +16,7 @@ export function decodePreferences(value) {
   if (!isRecord(value) || value.version !== VERSION || !isRecord(value.pages)) throw new Error('unsupported preferences document');
   const result = empty();
   if (validRailWidth(value.railWidth)) result.railWidth = value.railWidth;
+  if (RAIL_POSITIONS.includes(value.railPosition)) result.railPosition = value.railPosition;
   for (const [id, arrangement] of Object.entries(value.pages)) {
     if (!id || !isRecord(arrangement)) continue;
     const saved = {};
@@ -48,7 +49,15 @@ export function createBrowserPreferences(config, { getStorage = () => globalThis
   };
   return {
     key,
-    getRailWidth() { return document.railWidth ?? RAIL_WIDTH.default; },
+    getRailPosition() { return document.railPosition; },
+    setRailPosition(position) {
+      if (!RAIL_POSITIONS.includes(position)) throw new RangeError(`dsh-pages: navigation position must be one of ${RAIL_POSITIONS.join(', ')}`);
+      document.railPosition = position;
+      save();
+    },
+    getRailWidth() {
+      return document.railWidth ?? (validRailWidth(config.defaultRailWidth) ? config.defaultRailWidth : RAIL_WIDTH.default);
+    },
     setRailWidth(width) {
       if (!validRailWidth(width)) throw new RangeError('dsh-pages: navigation width must be an integer between 40 and 96');
       document.railWidth = width;
